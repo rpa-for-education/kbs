@@ -20,27 +20,26 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.x'
 
       - name: Install dependencies
         run: |
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Handle action
+      - name: Run or Stop Script
         run: |
-          if [ "${{ github.event_name }}" == "schedule" ] || [ "${{ github.event.inputs.action }}" == "start" ]; then
+          if [ "${{ github.event.inputs.action }}" = "start" ]; then
             echo "Starting bot..."
             python rpakbs.py
-          elif [ "${{ github.event.inputs.action }}" == "stop" ]; then
+            echo $! > bot.pid
+          elif [ "${{ github.event.inputs.action }}" = "stop" ]; then
             echo "Stopping bot..."
-            # Thêm logic dừng bot tại đây
-            # Ví dụ: nếu bot lưu PID trong file
             if [ -f bot.pid ]; then
-              kill -SIGTERM $(cat bot.pid)
-              rm bot.pid
-              echo "Bot stopped"
+              kill $(cat bot.pid) || echo "No process found"
+              rm -f bot.pid
             else
-              echo "No running bot found"
+              echo "No PID file found"
             fi
           else
             echo "Invalid action: ${{ github.event.inputs.action }}"
