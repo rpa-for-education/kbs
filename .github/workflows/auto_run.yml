@@ -2,8 +2,13 @@ name: Run Python Script Daily
 
 on:
   schedule:
-    - cron: '30 11 * * *'  # 18:30 Việt Nam 11+7
+    - cron: '30 11 * * *'  # 18:30 Việt Nam (11:30 UTC)
   workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform (start/stop)'
+        required: true
+        default: 'start'
 
 jobs:
   run-script:
@@ -21,6 +26,23 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: Run script
+      - name: Handle action
         run: |
-          python rpakbs.py
+          if [ "${{ github.event_name }}" == "schedule" ] || [ "${{ github.event.inputs.action }}" == "start" ]; then
+            echo "Starting bot..."
+            python rpakbs.py
+          elif [ "${{ github.event.inputs.action }}" == "stop" ]; then
+            echo "Stopping bot..."
+            # Thêm logic dừng bot tại đây
+            # Ví dụ: nếu bot lưu PID trong file
+            if [ -f bot.pid ]; then
+              kill -SIGTERM $(cat bot.pid)
+              rm bot.pid
+              echo "Bot stopped"
+            else
+              echo "No running bot found"
+            fi
+          else
+            echo "Invalid action: ${{ github.event.inputs.action }}"
+            exit 1
+          fi
