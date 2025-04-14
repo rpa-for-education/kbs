@@ -168,7 +168,7 @@ class DepartmentClassifierAPI:
             has_changes = False
             
             for dept_id, similarity in classifications.items():
-                if similarity >= 60:
+                if similarity >= 65:
                     data = {
                         "id_bai_viet": post_id,
                         "id_binh_luan": comment_id,
