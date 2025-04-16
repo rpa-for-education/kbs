@@ -51,7 +51,7 @@ class DepartmentClassifierAPI:
                 json.dump(data, f)
             print(f"[{uuid.uuid4()}] Saved {len(self.processed_items)} processed items.")
         except Exception as e:
-            print(f"[{uuid.uuid4()}] Error saving processed items: {str(e)}")
+            print(f"[{uuid.uuid4()}] Error saving processed_items: {str(e)}")
 
     def _load_keywords(self):
         try:
@@ -183,7 +183,7 @@ class DepartmentClassifierAPI:
                 page_comments = comments_response.json()
                 if not isinstance(page_comments, list):
                     print(
-                        f"[{uuid.uuid4()}] Error: Comments data is not a list (page {comment_page}), got: {page_comments}")
+                        f"[{uuid.uuid4()}] Error: Comments data is not a list (page {comment_page}), got: {json.dumps(page_comments, ensure_ascii=False)}")
                     continue
                 comments.extend(page_comments)
                 print(f"[{uuid.uuid4()}] Retrieved {len(page_comments)} comments (comment page {comment_page})")
@@ -193,6 +193,8 @@ class DepartmentClassifierAPI:
                 print(f"[{uuid.uuid4()}] Error fetching comments (page {comment_page}): {str(e)}")
                 continue
         print(f"[{uuid.uuid4()}] Total comments retrieved: {len(comments)}")
+        if len(comments) == 0:
+            print(f"[{uuid.uuid4()}] Warning: No comments retrieved. Check API or data availability.")
 
         post_comments = {post['id_bai_viet']: [] for post in posts if isinstance(post, dict) and 'id_bai_viet' in post}
         invalid_comments = 0
@@ -278,11 +280,13 @@ class DepartmentClassifierAPI:
                 return False
 
             content = comment['noi_dung_binh_luan'] if comment else post['noi_dung_bai_viet']
+            raw_content = content
             content = re.sub(r'<[^>]+>', '', content).strip()
             if not content:
                 print(f"[{uuid.uuid4()}] Warning: Empty content for post {post_id}, comment {comment_id}")
                 with open("skipped_content.log", "a", encoding="utf-8") as f:
-                    f.write(f"[{datetime.now()}] Post {post_id}, Comment {comment_id}: '{content}'\n")
+                    f.write(
+                        f"[{datetime.now()}] Post {post_id}, Comment {comment_id}: raw='{raw_content}', cleaned='{content}'\n")
                 return False
 
             classifications = self.classify_text(content)
