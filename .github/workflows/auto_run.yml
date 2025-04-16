@@ -78,7 +78,7 @@ jobs:
         if: github.event.inputs.action == 'start'
         run: |
           git config user.name "GitHub Actions Bot"
-          git config user.email "actions@github.com"
+          git config user.email "faxctions@github.com"
           if [ -f processed_items.json ]; then
             git add processed_items.json
             git commit -m "Update processed_items.json" || echo "No changes to commit."

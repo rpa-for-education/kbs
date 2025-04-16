@@ -202,9 +202,9 @@ class DepartmentClassifierAPI:
         for post_id, comments in post_comments.items():
             print(f"[{uuid.uuid4()}] Post {post_id} has {len(comments)} comments.")
 
-        post_ids = {post['id_bai_viet'] for post in posts if isinstance(post, dict) and 'id_bai_viet' in post}
-        processed_post_ids = {p for p, c in self.processed_items}
-        overlap = post_ids & processed_post_ids
+        post_ids = {post['id_bai_viet']: post for post in posts if isinstance(post, dict) and 'id_bai_viet' in post}
+        processed_post_ids = {p for p, _ in self.processed_items}
+        overlap = set(post_ids.keys()) & processed_post_ids
         duplicate_ratio = len(overlap) / max(len(post_ids), 1)
         print(
             f"[{uuid.uuid4()}] Duplicate check: {len(overlap)}/{len(post_ids)} duplicates (ratio: {duplicate_ratio:.2f})")
@@ -216,11 +216,7 @@ class DepartmentClassifierAPI:
         skipped_empty = 0
         skipped_duplicate = 0
         processed_count = 0
-        for post in tqdm(posts, desc=f"Processing posts (page {page})"):
-            if not isinstance(post, dict) or 'id_bai_viet' not in post:
-                print(f"[{uuid.uuid4()}] Warning: Invalid post data: {post}")
-                continue
-            post_id = post['id_bai_viet']
+        for post_id, post in tqdm(post_ids.items(), desc=f"Processing posts (page {page})"):
             if post_id in post_comments:
                 if self._process_item(post, None, existing_results):
                     processed_count += 1
@@ -277,8 +273,7 @@ class DepartmentClassifierAPI:
             content = comment['noi_dung_binh_luan'] if comment else post['noi_dung_bai_viet']
             content = re.sub(r'<[^>]+>', '', content).strip()
             if not content:
-                print(
-                    f"[{uuid.uuid4()}] Warning: Empty content for post {post_id}, comment {comment_id}, content: '{content}'")
+                print(f"[{uuid.uuid4()}] Warning: Empty content for post {post_id}, comment {comment_id}")
                 with open("skipped_content.log", "a", encoding="utf-8") as f:
                     f.write(f"[{datetime.now()}] Post {post_id}, Comment {comment_id}: '{content}'\n")
                 return False
