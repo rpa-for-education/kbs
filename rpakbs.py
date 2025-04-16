@@ -14,6 +14,7 @@ import re
 
 class DepartmentClassifierAPI:
     def __init__(self):
+        print(f"[{uuid.uuid4()}] Starting __init__...")
         self.comment_api = "https://api.rpa4edu.shop/api_binh_luan.php"
         self.post_api = "https://api.rpa4edu.shop/api_bai_viet.php"
         self.dictionary_api = "https://api.rpa4edu.shop/api_tu_dien.php"
@@ -23,10 +24,12 @@ class DepartmentClassifierAPI:
         self.model = AutoModel.from_pretrained("vinai/phobert-base", token=None)
 
         self.departments = self._load_keywords()
+        self.embedding_cache = {}  # Cache for embeddings
+        print(f"[{uuid.uuid4()}] embedding_cache initialized: {self.embedding_cache}")
         self.department_embeddings = self._calculate_department_embeddings()
         self.processed_items = self._load_processed_items()
-        self.embedding_cache = {}  # Cache for embeddings
         self.similarity_threshold = 0.65
+        print(f"[{uuid.uuid4()}] __init__ completed.")
 
     def _load_processed_items(self):
         try:
@@ -87,6 +90,7 @@ class DepartmentClassifierAPI:
                 print(f"[{uuid.uuid4()}] Warning: No keywords for dept {dept_id}, skipping embedding.")
                 continue
             text = " ".join(keywords)
+            print(f"[{uuid.uuid4()}] Generating embedding for dept {dept_id}: {text[:50]}...")
             dept_emb = self._get_embeddings(text)
             if dept_emb is not None and dept_emb.shape[0] > 0:
                 department_embeddings[dept_id] = dept_emb.mean(axis=0)
@@ -96,12 +100,14 @@ class DepartmentClassifierAPI:
         return department_embeddings
 
     def _get_embeddings(self, text):
+        print(f"[{uuid.uuid4()}] Getting embedding for text: {text[:50]}...")
         if not text or not isinstance(text, str):
             print(f"[{uuid.uuid4()}] Warning: Invalid or empty text input for embeddings: '{text}'")
             return np.zeros((1, 768))
 
         cache_key = hash(text)
         if cache_key in self.embedding_cache:
+            print(f"[{uuid.uuid4()}] Cache hit for text: {text[:50]}...")
             return self.embedding_cache[cache_key]
 
         try:
@@ -113,6 +119,7 @@ class DepartmentClassifierAPI:
                     print(f"[{uuid.uuid4()}] Warning: Empty embeddings generated for text: '{text}'")
                     return np.zeros((1, 768))
                 self.embedding_cache[cache_key] = embeddings[0]
+                print(f"[{uuid.uuid4()}] Cached embedding for text: {text[:50]}...")
                 return embeddings[0]
         except Exception as e:
             print(f"[{uuid.uuid4()}] Error generating embeddings: {str(e)}")

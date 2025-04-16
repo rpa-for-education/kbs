@@ -54,7 +54,13 @@ jobs:
 
       - name: Verify script
         run: |
-          grep "embedding_cache = {}" rpakbs.py || (echo "Error: embedding_cache not found in rpakbs.py" && exit 1)
+          echo "Listing files in directory:"
+          ls -la
+          echo "Checking rpakbs.py content:"
+          cat rpakbs.py | grep "embedding_cache = {}" || (echo "Error: embedding_cache not found in rpakbs.py" && exit 1)
+          echo "Checking for pycache:"
+          find . -name "*.pyc" -exec rm -f {} \;
+          echo "Removed pycache files."
 
       - name: Run Script
         run: |
@@ -78,7 +84,7 @@ jobs:
         if: github.event.inputs.action == 'start'
         run: |
           git config user.name "GitHub Actions Bot"
-          git config user.email "faxctions@github.com"
+          git config user.email "actions@github.com"
           if [ -f processed_items.json ]; then
             git add processed_items.json
             git commit -m "Update processed_items.json" || echo "No changes to commit."
