@@ -52,7 +52,7 @@ class DepartmentClassifierAPI:
 
     def _load_keywords(self):
         try:
-            response = requests.get(self.dictionary_api)
+            response = requests.get(self.dictionary_api, timeout=10)
             if response.status_code != 200:
                 print(f"[{uuid.uuid4()}] Error: Failed to fetch keywords, status code: {response.status_code}")
                 return {}
@@ -134,20 +134,28 @@ class DepartmentClassifierAPI:
             return False
 
         # Fetch posts with pagination
-        posts_response = requests.get(self.post_api, params={"page": page, "limit": limit})
-        if posts_response.status_code != 200:
-            print(f"[{uuid.uuid4()}] Error: Failed to fetch posts, status code: {posts_response.status_code}")
+        try:
+            posts_response = requests.get(self.post_api, params={"page": page, "limit": limit}, timeout=10)
+            if posts_response.status_code != 200:
+                print(f"[{uuid.uuid4()}] Error: Failed to fetch posts, status code: {posts_response.status_code}")
+                return False
+            posts = posts_response.json()
+            print(f"[{uuid.uuid4()}] Retrieved {len(posts)} posts (page {page})")
+        except Exception as e:
+            print(f"[{uuid.uuid4()}] Error fetching posts: {str(e)}")
             return False
-        posts = posts_response.json() if posts_response.status_code == 200 else []
-        print(f"[{uuid.uuid4()}] Retrieved {len(posts)} posts (page {page})")
 
         # Fetch comments with pagination
-        comments_response = requests.get(self.comment_api, params={"page": page, "limit": limit})
-        if comments_response.status_code != 200:
-            print(f"[{uuid.uuid4()}] Error: Failed to fetch comments, status code: {comments_response.status_code}")
+        try:
+            comments_response = requests.get(self.comment_api, params={"page": page, "limit": limit}, timeout=10)
+            if comments_response.status_code != 200:
+                print(f"[{uuid.uuid4()}] Error: Failed to fetch comments, status code: {comments_response.status_code}")
+                return False
+            comments = comments_response.json()
+            print(f"[{uuid.uuid4()}] Retrieved {len(comments)} comments (page {page})")
+        except Exception as e:
+            print(f"[{uuid.uuid4()}] Error fetching comments: {str(e)}")
             return False
-        comments = comments_response.json() if comments_response.status_code == 200 else []
-        print(f"[{uuid.uuid4()}] Retrieved {len(comments)} comments (page {page})")
 
         # Group comments by post
         post_comments = {post['id_bai_viet']: [] for post in posts if isinstance(post, dict) and 'id_bai_viet' in post}
@@ -167,16 +175,24 @@ class DepartmentClassifierAPI:
         has_new_data = False
         skipped_empty = 0
         skipped_duplicate = 0
+        processed_count = 0
         for post in tqdm(posts, desc=f"Processing posts (page {page})"):
             if not isinstance(post, dict) or 'id_bai_viet' not in post:
                 continue
             post_id = post['id_bai_viet']
             if post_id in post_comments:
                 if self._process_item(post, None, existing_results):
+                    processed_count += 1
                     has_new_data = True
+                else:
+                    if (post_id, '0') in self.processed_items:
+                        skipped_duplicate += 1
+                    else:
+                        skipped_empty += 1
                 for comment in tqdm(post_comments[post_id], desc=f"Processing comments for post {post_id}",
                                     leave=False):
                     if self._process_item(post, comment, existing_results):
+                        processed_count += 1
                         has_new_data = True
                     else:
                         if (post_id, comment.get('id_binh_luan', '0')) in self.processed_items:
@@ -185,6 +201,7 @@ class DepartmentClassifierAPI:
                             skipped_empty += 1
             else:
                 if self._process_item(post, None, existing_results):
+                    processed_count += 1
                     has_new_data = True
                 else:
                     if (post_id, '0') in self.processed_items:
@@ -193,7 +210,7 @@ class DepartmentClassifierAPI:
                         skipped_empty += 1
 
         print(
-            f"[{uuid.uuid4()}] Finished page {page}. New items processed: {len(self.processed_items) - len(processed_post_ids)}, Skipped (duplicate): {skipped_duplicate}, Skipped (empty): {skipped_empty}")
+            f"[{uuid.uuid4()}] Finished page {page}. New items processed: {processed_count}, Skipped (duplicate): {skipped_duplicate}, Skipped (empty): {skipped_empty}")
         self._save_processed_items()
         return has_new_data
 
@@ -216,6 +233,7 @@ class DepartmentClassifierAPI:
                 return False
 
             content = comment['noi_dung_binh_luan'] if comment else post['noi_dung_bai_viet']
+            content = re.sub(r'<[^>]+>', '', content).strip()  # Remove HTML tags
             if not content or len(content.split()) < 3:
                 print(f"[{uuid.uuid4()}] Warning: Empty or too short content for post {post_id}, comment {comment_id}")
                 return False
@@ -233,10 +251,10 @@ class DepartmentClassifierAPI:
                         "phan_tram_lien_quan": str(round(similarity, 2))
                     }
                     try:
-                        response = requests.post(self.result_api, json=data)
+                        response = requests.post(self.result_api, json=data, timeout=10)
                         if response.status_code in [200, 201]:
                             print(
-                                f"[{uuid.uuid4()}] Success: Processed result for post {post_id}, comment {comment_id}, department {dept_id}")
+                                f"[{uuid.uuid4()}] Success: Processed result for post {post_id}, comment {comment_id}, department {dept_id}, similarity {round(similarity, 2)}%")
                             has_changes = True
                         else:
                             print(
@@ -253,7 +271,7 @@ class DepartmentClassifierAPI:
 
     def _get_existing_results(self):
         try:
-            response = requests.get(self.result_api)
+            response = requests.get(self.result_api, timeout=10)
             if response.status_code != 200:
                 print(f"[{uuid.uuid4()}] Error: Failed to fetch existing results, status code: {response.status_code}")
                 return []
@@ -281,10 +299,13 @@ def main():
         page = 1
         while page <= max_pages:
             print(f"[{uuid.uuid4()}] Processing content (page {page})...")
+            start_time = time.time()
             has_new_data = classifier.process_content(page=page)
+            elapsed_time = time.time() - start_time
 
             if not has_new_data:
-                print(f"[{uuid.uuid4()}] Info: No new data to process in page {page}. Moving to next page or stopping.")
+                print(
+                    f"[{uuid.uuid4()}] Info: No new data to process in page {page}. Moving to next page or stopping. Elapsed time: {elapsed_time:.2f}s")
                 page += 1
                 continue
 
@@ -292,11 +313,12 @@ def main():
             has_new_data = classifier.update_keywords()
 
             if not has_new_data:
-                print(f"[{uuid.uuid4()}] Info: No new data after keyword update in page {page}. Moving to next page.")
+                print(
+                    f"[{uuid.uuid4()}] Info: No new data after keyword update in page {page}. Moving to next page. Elapsed time: {elapsed_time:.2f}s")
                 page += 1
                 continue
 
-            print(f"[{uuid.uuid4()}] Waiting for next cycle...")
+            print(f"[{uuid.uuid4()}] Waiting for next cycle (300s)...")
             time.sleep(300)
             page += 1
 
