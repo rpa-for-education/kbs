@@ -70,8 +70,8 @@ class DepartmentClassifierAPI:
                 if dept_id not in departments:
                     departments[dept_id] = []
                 keywords = item['tu_khoa'].strip()
-                if keywords:  # Accept single words
-                    departments[dept_id].append(keywords.replace('-', ' '))  # Handle hyphenated words
+                if keywords:
+                    departments[dept_id].append(keywords.replace('-', ' '))
                 else:
                     print(f"[{uuid.uuid4()}] Warning: Skipping empty keyword for dept {dept_id}")
             print(f"[{uuid.uuid4()}] Loaded keywords for {len(departments)} departments.")
@@ -96,7 +96,7 @@ class DepartmentClassifierAPI:
         return department_embeddings
 
     def _get_embeddings(self, text):
-        if not text or not isinstance(text, str) or len(text.split()) < 1:  # Relaxed condition
+        if not text or not isinstance(text, str):
             print(f"[{uuid.uuid4()}] Warning: Invalid or empty text input for embeddings: '{text}'")
             return np.zeros((1, 768))
 
@@ -119,7 +119,7 @@ class DepartmentClassifierAPI:
             return np.zeros((1, 768))
 
     def classify_text(self, text):
-        if not text or not isinstance(text, str) or len(text.split()) < 1:  # Relaxed condition
+        if not text or not isinstance(text, str):
             print(f"[{uuid.uuid4()}] Warning: Invalid or empty text input for classification: '{text}'")
             return {}
 
@@ -276,9 +276,9 @@ class DepartmentClassifierAPI:
 
             content = comment['noi_dung_binh_luan'] if comment else post['noi_dung_bai_viet']
             content = re.sub(r'<[^>]+>', '', content).strip()
-            if not content or len(content.split()) < 1:  # Relaxed condition
+            if not content:
                 print(
-                    f"[{uuid.uuid4()}] Warning: Empty or too short content for post {post_id}, comment {comment_id}, content: '{content}'")
+                    f"[{uuid.uuid4()}] Warning: Empty content for post {post_id}, comment {comment_id}, content: '{content}'")
                 with open("skipped_content.log", "a", encoding="utf-8") as f:
                     f.write(f"[{datetime.now()}] Post {post_id}, Comment {comment_id}: '{content}'\n")
                 return False
@@ -340,7 +340,7 @@ def main():
         print(f"[{uuid.uuid4()}] Initializing Department Classifier...")
         classifier = DepartmentClassifierAPI()
 
-        max_pages = 5  # Reduced to avoid duplicates
+        max_pages = 5
         page = 1
         while page <= max_pages:
             print(f"[{uuid.uuid4()}] Processing content (page {page})...")

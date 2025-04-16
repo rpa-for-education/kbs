@@ -52,6 +52,10 @@ jobs:
         run: |
           pip check || echo "Dependency check failed, proceeding with caution..."
 
+      - name: Verify script
+        run: |
+          grep "embedding_cache = {}" rpakbs.py || (echo "Error: embedding_cache not found in rpakbs.py" && exit 1)
+
       - name: Run Script
         run: |
           if [ "${{ github.event.inputs.action }}" = "start" ]; then
