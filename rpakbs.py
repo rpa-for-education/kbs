@@ -24,8 +24,8 @@ class DepartmentClassifierAPI:
         self.model = AutoModel.from_pretrained("vinai/phobert-base", token=None)
 
         self.departments = self._load_keywords()
-        self.embedding_cache = {}  # Cache for embeddings
-        print(f"[{uuid.uuid4()}] embedding_cache initialized: {self.embedding_cache}")
+        self.embedding_cache = self._load_embedding_cache()
+        print(f"[{uuid.uuid4()}] embedding_cache initialized: {len(self.embedding_cache)} items")
         self.department_embeddings = self._calculate_department_embeddings()
         self.processed_items = self._load_processed_items()
         self.similarity_threshold = 0.65
@@ -52,6 +52,27 @@ class DepartmentClassifierAPI:
             print(f"[{uuid.uuid4()}] Saved {len(self.processed_items)} processed items.")
         except Exception as e:
             print(f"[{uuid.uuid4()}] Error saving processed_items: {str(e)}")
+
+    def _load_embedding_cache(self):
+        try:
+            with open("embedding_cache.json", "r") as f:
+                cache = json.load(f)
+                print(f"[{uuid.uuid4()}] Loaded {len(cache)} cached embeddings.")
+                return cache
+        except FileNotFoundError:
+            print(f"[{uuid.uuid4()}] No embedding cache file found, starting fresh.")
+            return {}
+        except Exception as e:
+            print(f"[{uuid.uuid4()}] Error loading embedding cache: {str(e)}")
+            return {}
+
+    def _save_embedding_cache(self):
+        try:
+            with open("embedding_cache.json", "w") as f:
+                json.dump(self.embedding_cache, f)
+            print(f"[{uuid.uuid4()}] Saved {len(self.embedding_cache)} cached embeddings.")
+        except Exception as e:
+            print(f"[{uuid.uuid4()}] Error saving embedding cache: {str(e)}")
 
     def _load_keywords(self):
         try:
@@ -165,14 +186,22 @@ class DepartmentClassifierAPI:
             if not isinstance(posts, list):
                 print(f"[{uuid.uuid4()}] Error: Posts data is not a list, got: {posts}")
                 return False
-            print(f"[{uuid.uuid4()}] Retrieved {len(posts)} posts (page {page})")
+            valid_posts = [post for post in posts if isinstance(post, dict) and 'noi_dung_bai_viet' in post and post[
+                'noi_dung_bai_viet'] and isinstance(post['noi_dung_bai_viet'], str) and len(
+                re.sub(r'<[^>]+>', '', post['noi_dung_bai_viet']).strip()) >= 5]
+            print(
+                f"[{uuid.uuid4()}] Retrieved {len(posts)} posts (page {page}), {len(valid_posts)} valid posts after filtering")
+            posts = valid_posts
         except Exception as e:
             print(f"[{uuid.uuid4()}] Error fetching posts: {str(e)}")
             return False
 
         comments = []
         max_comment_pages = 3
+        tried_post_ids = False
         for comment_page in range(page, page + max_comment_pages):
+            if tried_post_ids:
+                break
             try:
                 params = {"page": comment_page, "limit": limit}
                 comments_response = requests.get(self.comment_api, params=params, timeout=15)
@@ -184,16 +213,23 @@ class DepartmentClassifierAPI:
                 if not isinstance(page_comments, list):
                     print(
                         f"[{uuid.uuid4()}] Error: Comments data is not a list (page {comment_page}), got: {json.dumps(page_comments, ensure_ascii=False)}")
-                    # Thử với post_id nếu page thất bại
-                    if comment_page == page:
-                        for post in posts[:5]:  # Thử 5 bài viết đầu
+                    if comment_page == page and not tried_post_ids:
+                        tried_post_ids = True
+                        for post in posts[:10]:
                             post_id = post.get('id_bai_viet')
                             try:
                                 response = requests.get(self.comment_api, params={"post_id": post_id}, timeout=15)
-                                if response.status_code == 200 and isinstance(response.json(), list):
-                                    comments.extend(response.json())
-                                    print(
-                                        f"[{uuid.uuid4()}] Retrieved {len(response.json())} comments for post {post_id}")
+                                print(
+                                    f"[{uuid.uuid4()}] Attempted comments for post {post_id}, status code: {response.status_code}")
+                                if response.status_code == 200:
+                                    post_comments_data = response.json()
+                                    if isinstance(post_comments_data, list):
+                                        comments.extend(post_comments_data)
+                                        print(
+                                            f"[{uuid.uuid4()}] Retrieved {len(post_comments_data)} comments for post {post_id}")
+                                    else:
+                                        print(
+                                            f"[{uuid.uuid4()}] Error: Comments for post {post_id} not a list, got: {json.dumps(post_comments_data, ensure_ascii=False)}")
                             except Exception as e:
                                 print(f"[{uuid.uuid4()}] Error fetching comments for post {post_id}: {str(e)}")
                     continue
@@ -269,6 +305,7 @@ class DepartmentClassifierAPI:
         print(
             f"[{uuid.uuid4()}] Finished page {page}. New items processed: {processed_count}, Skipped (duplicate): {skipped_duplicate}, Skipped (empty): {skipped_empty}")
         self._save_processed_items()
+        self._save_embedding_cache()
         return has_new_data
 
     def _process_item(self, post, comment, existing_results):
@@ -291,6 +328,12 @@ class DepartmentClassifierAPI:
                 return False
 
             content = comment['noi_dung_binh_luan'] if comment else post['noi_dung_bai_viet']
+            if not content or not isinstance(content, str):
+                print(f"[{uuid.uuid4()}] Warning: Invalid content for post {post_id}, comment {comment_id}: {content}")
+                with open("skipped_content.log", "a", encoding="utf-8") as f:
+                    f.write(
+                        f"[{datetime.now()}] Post {post_id}, Comment {comment_id}: raw='{content}', cleaned='None'\n")
+                return False
             raw_content = content
             content = re.sub(r'<[^>]+>', '', content).strip()
             if not content or len(content) < 5:
