@@ -14,9 +14,9 @@ jobs:
   run-script:
     runs-on: ubuntu-latest
     permissions:
-      contents: write  # Allow committing processed_items.json
+      contents: write
     env:
-      TF_CPP_MIN_LOG_LEVEL: "3"  # Suppress TensorFlow warnings
+      TF_CPP_MIN_LOG_LEVEL: "3"
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -46,7 +46,7 @@ jobs:
           python -m pip install --upgrade pip setuptools
           pip install tensorflow==2.17.0 -v
           pip install -r requirements.txt || echo "Dependency installation failed, trying relaxed versions..."
-          pip install numpy==1.26.4 -r requirements.txt || exit 1  # Fallback to known compatible numpy
+          pip install numpy==1.26.4 -r requirements.txt || exit 1
 
       - name: Check dependency conflicts
         run: |
@@ -60,6 +60,14 @@ jobs:
           else
             echo "Invalid action: ${{ github.event.inputs.action }}"
             exit 1
+          fi
+
+      - name: Save skipped content
+        if: github.event.inputs.action == 'start'
+        run: |
+          if [ -f skipped_content.log ]; then
+            echo "Saving skipped content log..."
+            mv skipped_content.log skipped_content_$(date +%F_%H-%M-%S).log
           fi
 
       - name: Commit processed items
@@ -80,4 +88,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: script-output
-          path: script_output.log
+          path: |
+            script_output.log
+            skipped_content_*.log
