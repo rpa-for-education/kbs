@@ -19,8 +19,8 @@ class DepartmentClassifierAPI:
         self.dictionary_api = "https://api.rpa4edu.shop/api_tu_dien.php"
         self.result_api = "https://api.rpa4edu.shop/api_bai_viet_binh_luan_don_vi.php"
 
-        self.tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base", use_auth_token=False)
-        self.model = AutoModel.from_pretrained("vinai/phobert-base", use_auth_token=False)
+        self.tokenizer = AutoTokenizer.from_pretrained("vinai/phobert-base", token=None)
+        self.model = AutoModel.from_pretrained("vinai/phobert-base", token=None)
 
         self.departments = self._load_keywords()
         self.department_embeddings = self._calculate_department_embeddings()
@@ -70,10 +70,10 @@ class DepartmentClassifierAPI:
                 if dept_id not in departments:
                     departments[dept_id] = []
                 keywords = item['tu_khoa'].strip()
-                if keywords and len(keywords.split()) >= 2:
-                    departments[dept_id].append(keywords)
+                if keywords:  # Accept single words
+                    departments[dept_id].append(keywords.replace('-', ' '))  # Handle hyphenated words
                 else:
-                    print(f"[{uuid.uuid4()}] Warning: Skipping short or empty keyword: {keywords} for dept {dept_id}")
+                    print(f"[{uuid.uuid4()}] Warning: Skipping empty keyword for dept {dept_id}")
             print(f"[{uuid.uuid4()}] Loaded keywords for {len(departments)} departments.")
             return departments
         except Exception as e:
@@ -96,8 +96,8 @@ class DepartmentClassifierAPI:
         return department_embeddings
 
     def _get_embeddings(self, text):
-        if not text or not isinstance(text, str) or len(text.split()) < 2:
-            print(f"[{uuid.uuid4()}] Warning: Invalid or too short text input for embeddings: '{text}'")
+        if not text or not isinstance(text, str) or len(text.split()) < 1:  # Relaxed condition
+            print(f"[{uuid.uuid4()}] Warning: Invalid or empty text input for embeddings: '{text}'")
             return np.zeros((1, 768))
 
         cache_key = hash(text)
@@ -119,8 +119,8 @@ class DepartmentClassifierAPI:
             return np.zeros((1, 768))
 
     def classify_text(self, text):
-        if not text or not isinstance(text, str) or len(text.split()) < 2:
-            print(f"[{uuid.uuid4()}] Warning: Invalid or too short text input for classification: '{text}'")
+        if not text or not isinstance(text, str) or len(text.split()) < 1:  # Relaxed condition
+            print(f"[{uuid.uuid4()}] Warning: Invalid or empty text input for classification: '{text}'")
             return {}
 
         try:
@@ -149,7 +149,6 @@ class DepartmentClassifierAPI:
             print(f"[{uuid.uuid4()}] Error: Existing results is not a list, skipping processing")
             return False
 
-        # Fetch posts
         try:
             posts_response = requests.get(self.post_api, params={"page": page, "limit": limit}, timeout=15)
             if posts_response.status_code != 200:
@@ -164,9 +163,8 @@ class DepartmentClassifierAPI:
             print(f"[{uuid.uuid4()}] Error fetching posts: {str(e)}")
             return False
 
-        # Fetch comments (try multiple pages if empty)
         comments = []
-        max_comment_pages = 3  # Try up to 3 comment pages
+        max_comment_pages = 3
         for comment_page in range(page, page + max_comment_pages):
             try:
                 comments_response = requests.get(self.comment_api, params={"page": comment_page, "limit": limit},
@@ -183,13 +181,12 @@ class DepartmentClassifierAPI:
                 comments.extend(page_comments)
                 print(f"[{uuid.uuid4()}] Retrieved {len(page_comments)} comments (comment page {comment_page})")
                 if len(page_comments) > 0:
-                    break  # Stop if we get comments
+                    break
             except Exception as e:
                 print(f"[{uuid.uuid4()}] Error fetching comments (page {comment_page}): {str(e)}")
                 continue
         print(f"[{uuid.uuid4()}] Total comments retrieved: {len(comments)}")
 
-        # Group comments by post
         post_comments = {post['id_bai_viet']: [] for post in posts if isinstance(post, dict) and 'id_bai_viet' in post}
         invalid_comments = 0
         for comment in comments:
@@ -202,11 +199,9 @@ class DepartmentClassifierAPI:
         if invalid_comments > 0:
             print(f"[{uuid.uuid4()}] Warning: Found {invalid_comments} invalid comments.")
 
-        # Log comment distribution
         for post_id, comments in post_comments.items():
             print(f"[{uuid.uuid4()}] Post {post_id} has {len(comments)} comments.")
 
-        # Check for duplicates
         post_ids = {post['id_bai_viet'] for post in posts if isinstance(post, dict) and 'id_bai_viet' in post}
         processed_post_ids = {p for p, c in self.processed_items}
         overlap = post_ids & processed_post_ids
@@ -281,7 +276,7 @@ class DepartmentClassifierAPI:
 
             content = comment['noi_dung_binh_luan'] if comment else post['noi_dung_bai_viet']
             content = re.sub(r'<[^>]+>', '', content).strip()
-            if not content or len(content.split()) < 2:
+            if not content or len(content.split()) < 1:  # Relaxed condition
                 print(
                     f"[{uuid.uuid4()}] Warning: Empty or too short content for post {post_id}, comment {comment_id}, content: '{content}'")
                 with open("skipped_content.log", "a", encoding="utf-8") as f:
@@ -345,7 +340,7 @@ def main():
         print(f"[{uuid.uuid4()}] Initializing Department Classifier...")
         classifier = DepartmentClassifierAPI()
 
-        max_pages = 10
+        max_pages = 5  # Reduced to avoid duplicates
         page = 1
         while page <= max_pages:
             print(f"[{uuid.uuid4()}] Processing content (page {page})...")
