@@ -57,7 +57,7 @@ jobs:
           echo "Listing files in directory:"
           ls -la
           echo "Checking rpakbs.py content:"
-          cat rpakbs.py | grep "embedding_cache = {}" || (echo "Error: embedding_cache not found in rpakbs.py" && exit 1)
+          cat rpakbs.py | grep "_load_embedding_cache" || (echo "Error: _load_embedding_cache not found in rpakbs.py" && exit 1)
           echo "Checking for pycache:"
           find . -name "*.pyc" -exec rm -f {} \;
           echo "Removed pycache files."
@@ -101,3 +101,4 @@ jobs:
           path: |
             script_output.log
             skipped_content_*.log
+            embedding_cache.json
