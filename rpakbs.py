@@ -9,6 +9,7 @@ import time
 import uuid
 from tqdm import tqdm
 import os
+import re  # Added to fix 'name re is not defined'
 
 
 class DepartmentClassifierAPI:
@@ -135,7 +136,7 @@ class DepartmentClassifierAPI:
 
         # Fetch posts with pagination
         try:
-            posts_response = requests.get(self.post_api, params={"page": page, "limit": limit}, timeout=10)
+            posts_response = requests.get(self.post_api, params={"page": page, "limit": limit}, timeout=15)
             if posts_response.status_code != 200:
                 print(f"[{uuid.uuid4()}] Error: Failed to fetch posts, status code: {posts_response.status_code}")
                 return False
@@ -147,7 +148,7 @@ class DepartmentClassifierAPI:
 
         # Fetch comments with pagination
         try:
-            comments_response = requests.get(self.comment_api, params={"page": page, "limit": limit}, timeout=10)
+            comments_response = requests.get(self.comment_api, params={"page": page, "limit": limit}, timeout=15)
             if comments_response.status_code != 200:
                 print(f"[{uuid.uuid4()}] Error: Failed to fetch comments, status code: {comments_response.status_code}")
                 return False
@@ -162,6 +163,12 @@ class DepartmentClassifierAPI:
         for comment in comments:
             if isinstance(comment, dict) and 'id_bai_viet' in comment:
                 post_comments.setdefault(comment['id_bai_viet'], []).append(comment)
+            else:
+                print(f"[{uuid.uuid4()}] Warning: Invalid comment data: {comment}")
+
+        # Log comment distribution
+        for post_id, comments in post_comments.items():
+            print(f"[{uuid.uuid4()}] Post {post_id} has {len(comments)} comments.")
 
         # Check for duplicates
         post_ids = {post['id_bai_viet'] for post in posts if isinstance(post, dict) and 'id_bai_viet' in post}
@@ -178,6 +185,7 @@ class DepartmentClassifierAPI:
         processed_count = 0
         for post in tqdm(posts, desc=f"Processing posts (page {page})"):
             if not isinstance(post, dict) or 'id_bai_viet' not in post:
+                print(f"[{uuid.uuid4()}] Warning: Invalid post data: {post}")
                 continue
             post_id = post['id_bai_viet']
             if post_id in post_comments:
@@ -226,6 +234,7 @@ class DepartmentClassifierAPI:
             item_key = (post_id, comment_id)
 
             if item_key in self.processed_items:
+                print(f"[{uuid.uuid4()}] Skipping processed item: post {post_id}, comment {comment_id}")
                 return False
 
             if comment and (not isinstance(comment, dict) or 'noi_dung_binh_luan' not in comment):
@@ -251,7 +260,7 @@ class DepartmentClassifierAPI:
                         "phan_tram_lien_quan": str(round(similarity, 2))
                     }
                     try:
-                        response = requests.post(self.result_api, json=data, timeout=10)
+                        response = requests.post(self.result_api, json=data, timeout=15)
                         if response.status_code in [200, 201]:
                             print(
                                 f"[{uuid.uuid4()}] Success: Processed result for post {post_id}, comment {comment_id}, department {dept_id}, similarity {round(similarity, 2)}%")
@@ -271,7 +280,7 @@ class DepartmentClassifierAPI:
 
     def _get_existing_results(self):
         try:
-            response = requests.get(self.result_api, timeout=10)
+            response = requests.get(self.result_api, timeout=15)
             if response.status_code != 200:
                 print(f"[{uuid.uuid4()}] Error: Failed to fetch existing results, status code: {response.status_code}")
                 return []
@@ -300,7 +309,7 @@ def main():
         while page <= max_pages:
             print(f"[{uuid.uuid4()}] Processing content (page {page})...")
             start_time = time.time()
-            has_new_data = classifier.process_content(page=page)
+            has_new_data = classifier.process_content(page=page, limit=100)
             elapsed_time = time.time() - start_time
 
             if not has_new_data:
