@@ -51,7 +51,7 @@ class DepartmentClassifierAPI:
                 json.dump(data, f)
             print(f"[{uuid.uuid4()}] Saved {len(self.processed_items)} processed items.")
         except Exception as e:
-            print(f"[{uuid.uuid4()]] Error saving processed_items: {str(e)}")
+            print(f"[{uuid.uuid4()}] Error saving processed_items: {str(e)}")
 
     def _load_keywords(self):
         try:
@@ -199,8 +199,6 @@ class DepartmentClassifierAPI:
                     continue
                 comments.extend(page_comments)
                 print(f"[{uuid.uuid4()}] Retrieved {len(page_comments)} comments (comment page {comment_page})")
-                if len(page_comments) > 0:
-                    break
             except Exception as e:
                 print(f"[{uuid.uuid4()}] Error fetching comments (page {comment_page}): {str(e)}")
                 continue
