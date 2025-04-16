@@ -51,7 +51,7 @@ class DepartmentClassifierAPI:
                 json.dump(data, f)
             print(f"[{uuid.uuid4()}] Saved {len(self.processed_items)} processed items.")
         except Exception as e:
-            print(f"[{uuid.uuid4()}] Error saving processed_items: {str(e)}")
+            print(f"[{uuid.uuid4()]] Error saving processed_items: {str(e)}")
 
     def _load_keywords(self):
         try:
@@ -174,8 +174,8 @@ class DepartmentClassifierAPI:
         max_comment_pages = 3
         for comment_page in range(page, page + max_comment_pages):
             try:
-                comments_response = requests.get(self.comment_api, params={"page": comment_page, "limit": limit},
-                                                 timeout=15)
+                params = {"page": comment_page, "limit": limit}
+                comments_response = requests.get(self.comment_api, params=params, timeout=15)
                 if comments_response.status_code != 200:
                     print(
                         f"[{uuid.uuid4()}] Error: Failed to fetch comments (page {comment_page}), status code: {comments_response.status_code}")
@@ -184,6 +184,18 @@ class DepartmentClassifierAPI:
                 if not isinstance(page_comments, list):
                     print(
                         f"[{uuid.uuid4()}] Error: Comments data is not a list (page {comment_page}), got: {json.dumps(page_comments, ensure_ascii=False)}")
+                    # Thử với post_id nếu page thất bại
+                    if comment_page == page:
+                        for post in posts[:5]:  # Thử 5 bài viết đầu
+                            post_id = post.get('id_bai_viet')
+                            try:
+                                response = requests.get(self.comment_api, params={"post_id": post_id}, timeout=15)
+                                if response.status_code == 200 and isinstance(response.json(), list):
+                                    comments.extend(response.json())
+                                    print(
+                                        f"[{uuid.uuid4()}] Retrieved {len(response.json())} comments for post {post_id}")
+                            except Exception as e:
+                                print(f"[{uuid.uuid4()}] Error fetching comments for post {post_id}: {str(e)}")
                     continue
                 comments.extend(page_comments)
                 print(f"[{uuid.uuid4()}] Retrieved {len(page_comments)} comments (comment page {comment_page})")
@@ -194,7 +206,7 @@ class DepartmentClassifierAPI:
                 continue
         print(f"[{uuid.uuid4()}] Total comments retrieved: {len(comments)}")
         if len(comments) == 0:
-            print(f"[{uuid.uuid4()}] Warning: No comments retrieved. Check API or data availability.")
+            print(f"[{uuid.uuid4()}] Warning: No comments retrieved. Check API parameters or data availability.")
 
         post_comments = {post['id_bai_viet']: [] for post in posts if isinstance(post, dict) and 'id_bai_viet' in post}
         invalid_comments = 0
@@ -218,7 +230,8 @@ class DepartmentClassifierAPI:
         print(
             f"[{uuid.uuid4()}] Duplicate check: {len(overlap)}/{len(post_ids)} duplicates (ratio: {duplicate_ratio:.2f})")
         if duplicate_ratio > 0.9:
-            print(f"[{uuid.uuid4()}] Warning: High duplicate ratio ({duplicate_ratio:.2f}) in page {page}. Stopping.")
+            print(
+                f"[{uuid.uuid4()}] Warning: High duplicate ratio ({duplicate_ratio:.2f}) in page {page}. Skipping page.")
             return False
 
         has_new_data = False
@@ -282,8 +295,8 @@ class DepartmentClassifierAPI:
             content = comment['noi_dung_binh_luan'] if comment else post['noi_dung_bai_viet']
             raw_content = content
             content = re.sub(r'<[^>]+>', '', content).strip()
-            if not content:
-                print(f"[{uuid.uuid4()}] Warning: Empty content for post {post_id}, comment {comment_id}")
+            if not content or len(content) < 5:
+                print(f"[{uuid.uuid4()}] Warning: Empty or too short content for post {post_id}, comment {comment_id}")
                 with open("skipped_content.log", "a", encoding="utf-8") as f:
                     f.write(
                         f"[{datetime.now()}] Post {post_id}, Comment {comment_id}: raw='{raw_content}', cleaned='{content}'\n")
